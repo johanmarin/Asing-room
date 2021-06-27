@@ -164,7 +164,7 @@ def extraer_resultados(dia, prob, grupos):
 
   return salon, horario
 
-def actualizar_dict(grupos, aulas, dia, salon, horario, drai, prof, resp):
+def actualizar_dict(grupos, aulas, dia, salon, horario, drai, prof, resp, tolerancia):
 
   for i in salon.keys():
     j = salon[i]
@@ -211,5 +211,5 @@ def run_model(path, tolerancia, dias = ['L', 'M', 'W', 'J', 'V', 'S']):
       I, J, K = define_parameters(aulas, dia, gr, hr)
       prob = solve_model(I, J, K, M, C, H)
       salon, horario = extraer_resultados(dia, prob, grupos)
-      drai, prof, resp = actualizar_dict(grupos, aulas, dia, salon, horario, drai, prof, resp)
+      drai, prof, resp = actualizar_dict(grupos, aulas, dia, salon, horario, drai, prof, resp, tolerancia)
   return pd.DataFrame.from_dict(drai), pd.DataFrame.from_dict(prof), resp
