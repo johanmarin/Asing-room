@@ -37,7 +37,7 @@ def iniciar_diccionarios(aulas, grupos, dias):
   drai = {j:{k: '' for k in order_h} for j in aulas.index}
   prof = {dia:{grupo:'' for grupo in grupos.index} for dia in dias}
 
-  resp = {'Tolerancia':{},'asignados': {},'n_grupos': {},'alumnos': {},
+  resp = {'Tolerancia':{}, 'Medios':{},'asignados': {},'n_grupos': {},'alumnos': {},
           'sin_asignar': {}, 'n_grupos_sin': {}, 'alumnos_sin': {},
           'prom_sub_uso': {}, 'max_sub_uso': {}, 'min_sub_uso': {}
         }
@@ -115,7 +115,7 @@ def define_parameters(aulas, dia, gr, hr):
 
   return I, J, K
 
-def solve_model(I, J, K, M, C, H, max_gr, s_piso):
+def solve_model(I, J, K, M, C, H, max_gr, s_piso, medios):
 
   prob = LpProblem('Aulas_grupos', LpMaximize)
   # Variables de desición
@@ -139,10 +139,17 @@ def solve_model(I, J, K, M, C, H, max_gr, s_piso):
   for i in I:
       prob += lpSum(x[i,j] for j in J) <= 1
 
-  # El aula asignada debe tener los mediso requeridos
-  for i in I:
-    for j in J:
-      prob += x[i,j] * M[i,j] == x[i,j]
+  if medios == 'obligatorio':
+    # El aula asignada debe tener los medios requeridos
+    for i in I:
+      for j in J:
+        prob += x[i,j] * M[i,j] == x[i,j]
+  
+  elif medios == 'flexible':
+    # Prioridad en los medios
+    for i in I:
+      for j in J:
+        prob += x[i,j] * M[i,j] == M[i,j]
 
   # El aula asignada debe tener la capacidad necesaria para el grupo
   for i in I:
@@ -167,7 +174,7 @@ def extraer_resultados(dia, prob, grupos):
 
   return salon, horario
 
-def actualizar_dict(grupos, aulas, dia, salon, horario, drai, prof, resp, tolerancia):
+def actualizar_dict(grupos, aulas, dia, salon, horario, drai, prof, resp, tolerancia,medios):
 
   for i in salon.keys():
     j = salon[i]
@@ -179,6 +186,7 @@ def actualizar_dict(grupos, aulas, dia, salon, horario, drai, prof, resp, tolera
   sin_asignar = [i for i in grupos.index if not i in asignados]
 
   resp['Tolerancia'][dia] = tolerancia
+  resp['Medios'][dia] = medios
   resp['asignados'][dia] = asignados
   resp['n_grupos'][dia] = len(asignados)
   resp['alumnos'][dia] = grupos.MAX[asignados].sum()
@@ -191,7 +199,7 @@ def actualizar_dict(grupos, aulas, dia, salon, horario, drai, prof, resp, tolera
 
   return drai, prof, resp
 
-def run_model(path, tolerancia, dias = ['L', 'M', 'W', 'J', 'V', 'S']):
+def run_model(path, tolerancia, medios='obligatorio', dias = ['L', 'M', 'W', 'J', 'V', 'S']):
   grupos, aulas = leer_datos(path)
   # Generar los diccionarios de salida
   drai, prof, resp = iniciar_diccionarios(aulas, grupos, dias)
@@ -214,7 +222,7 @@ def run_model(path, tolerancia, dias = ['L', 'M', 'W', 'J', 'V', 'S']):
     if dia in gr.keys():
       # Diccionarios de subconjuntos
       I, J, K = define_parameters(aulas, dia, gr, hr)
-      prob = solve_model(I, J, K, M, C, H, max_gr, s_piso)
+      prob = solve_model(I, J, K, M, C, H, max_gr, s_piso, medios)
       salon, horario = extraer_resultados(dia, prob, grupos)
-      drai, prof, resp = actualizar_dict(grupos, aulas, dia, salon, horario, drai, prof, resp, tolerancia)
+      drai, prof, resp = actualizar_dict(grupos, aulas, dia, salon, horario, drai, prof, resp, tolerancia,medios)
   return pd.DataFrame.from_dict(drai), pd.DataFrame.from_dict(prof), resp
