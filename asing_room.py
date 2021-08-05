@@ -9,7 +9,6 @@ def leer_datos(path):
 
   def time_lapse(x):
     h = [int(i) for i in re.findall(r'\d*', x) if i.isdigit()]
-    #hours = [str(i) + '-' + str(i+1) for i in range(h[0], h[1])]
     hours = [str(i) for i in range(h[0], h[1])]
     days = [day.upper() for day in re.findall(r'[aA-zZ]', x)]
     return' '.join([day+hour for day in days for hour in hours]) 
@@ -116,14 +115,14 @@ def define_parameters(aulas, dia, gr, hr):
 
   return I, J, K
 
-def solve_model(I, J, K, M, C, H):
+def solve_model(I, J, K, M, C, H, max_gr, s_piso):
 
   prob = LpProblem('Aulas_grupos', LpMaximize)
   # Variables de desición
   x = pulp.LpVariable.dicts('asinacion', ((i, j) for i in I for j in J), cat='Binary')
 
   # Función objetivo
-  prob += lpSum(x[i,j] * H[i,k] for i in I for j in J for k in K)
+  prob += lpSum(x[i,j] * H[i,k]*max_gr[i] for i in I for j in J for k in K)
 
   # Restricciones
   # Se puede asignar maximo una grupo a una aula en la misma hora
@@ -149,6 +148,10 @@ def solve_model(I, J, K, M, C, H):
   for i in I:
     for j in J:
       prob += x[i,j] * C[i,j] == x[i,j]
+
+  # El número total de alumnos en una hora debe ser inferior al número de sillas en el piso
+  for k in K:
+    prob += lpSum(x[i,j] * H[i,k]*max_gr[i] for i in I for j in J) <= s_piso
     
   ### Resolvemos e imprimimos el Status, si es Optimo, el problema tiene solución.
   prob.solve()
@@ -195,13 +198,15 @@ def run_model(path, tolerancia, dias = ['L', 'M', 'W', 'J', 'V', 'S']):
 
   # Precalculando parametros
   Mij = grupo_medios(grupos, aulas) # Si el salón  j  tienes los medios que requiere el grupo  i
-  Cij = grupo_capacidad(grupos, aulas)# Si el salón  j  tienes la capacidad que requiere el grupo  i
+  Cij = grupo_capacidad(grupos, aulas)# Si el salón  j  tiene la capacidad que requiere el grupo  i
   Hik = grupo_horas(grupos) # Si el grupo i se debe dictar a la hora k
 
   # Parámetros como diccionario
   M = {(row, col) : Mij.loc[row,col] for row in Mij.index for col in Mij.columns}
   C = {(row, col) : Cij.loc[row,col] for row in Cij.index for col in Cij.columns}
   H = {(row, col) : Hik.loc[row,col] for row in Hik.index for col in Hik.columns}
+  max_gr = {row: grupos.loc[row,'MAX'] for row in grupos.index}
+  s_piso = aulas.CAPACIDAD.sum()
   gr, hr = diccionarios_dia(grupos)
 
   # Solucionar le modelo para cada día
@@ -209,7 +214,7 @@ def run_model(path, tolerancia, dias = ['L', 'M', 'W', 'J', 'V', 'S']):
     if dia in gr.keys():
       # Diccionarios de subconjuntos
       I, J, K = define_parameters(aulas, dia, gr, hr)
-      prob = solve_model(I, J, K, M, C, H)
+      prob = solve_model(I, J, K, M, C, H, max_gr, s_piso)
       salon, horario = extraer_resultados(dia, prob, grupos)
       drai, prof, resp = actualizar_dict(grupos, aulas, dia, salon, horario, drai, prof, resp, tolerancia)
   return pd.DataFrame.from_dict(drai), pd.DataFrame.from_dict(prof), resp
